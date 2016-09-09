@@ -31,10 +31,18 @@ let child_score parent child =
 let child_cmp parent c1 c2 =
   compare (child_score parent c2) (child_score parent c1)
 
-(* TODO: get random sample with weighted probability *)
+(* cdf [("a", 0.1); ("b", 0.9)] = ([("b", (0.1, 1.)); ("a", (0., 0.1))], 1.) *)
+let cdf l = List.fold_left (fun (acc, sum) (x, w) ->
+  let sum' = sum +. w in ((x, (sum, sum')) :: acc, sum')) ([], 0.0) l
+
 let random_sample = function
-  [] -> failwith "random_sample"
-| xs -> (*let r = Random.int (List.length xs) in fst (List.nth xs r)*) fst (List.hd (List.sort (fun (_, x) (_, y) -> compare y x) xs))
+  [] -> failwith "random_sample: empty list"
+| xs ->
+    let (xs', lim) = cdf xs in
+    let r = Random.float lim in
+    fst (List.find (fun (x, (min, max)) -> min <= r && r <= max) xs')
+
+ (*let r = Random.int (List.length xs) in fst (List.nth xs r)*) (*fst (List.hd (List.sort (fun (_, x) (_, y) -> compare y x) xs))*)
 
 let rec default_policy p s =
   match (p.successors) s with
