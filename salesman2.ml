@@ -21,8 +21,6 @@ let rec butlast l = match l with
   | x :: [] -> []
   | (x :: xs) -> x :: butlast xs
 
-let min_dist = ref 100000000.
-
 let round_trip_dist dists path =
   List.fold_right2 (fun c1 c2 -> (+.) (dists c1 c2)) (butlast path) (List.tl path) 0.
 
@@ -30,9 +28,13 @@ let state_acts probf n visited =
   let score c = probf (List.hd visited) c in
   let l = List.length visited in
   if l < n then
-    (1--n) |> Enum.filter (fun c -> not (List.mem c visited))
-    |> Enum.map (fun c -> (c :: visited, score c)) |> List.of_enum
-  else if l = n then [(1 :: visited, score 1)]
+    (1--n)
+    |> filter (fun c -> not (List.mem c visited))
+    |> map (fun c -> (c :: visited, score c))
+    |> List.of_enum
+    |> List.sort (fun (_,x) (_,y) -> compare y x)
+    |> List.mapi (fun i (x,_) -> x, 1. /. ((float_of_int (i+1) ** 7.)))
+  else if l = n then [(1 :: visited, (*score 1*) 1.)]
   else []
 
 let dupl x = (x, x)
@@ -45,7 +47,7 @@ let rec ltake n l = lazy (
 
 let eval distsf path =
   let d = round_trip_dist distsf path in
-  min_dist := min d !min_dist;
+  Format.printf "%f\n%!" d;
   33000. /. d
 
 
@@ -60,4 +62,4 @@ let _ =
   let trees = LazyList.from_loop init (tree_policy tsp_problem %> dupl) in
   trees
   |> ltake 15000
-  |> LazyList.iter (fun _ -> Format.printf "%f\n" !min_dist)
+  |> LazyList.iter (fun _ -> ())
