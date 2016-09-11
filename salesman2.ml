@@ -33,7 +33,7 @@ let state_acts probf n visited =
     |> map (fun c -> (c :: visited, score c))
     |> List.of_enum
     |> List.sort (fun (_,x) (_,y) -> compare y x)
-    |> List.mapi (fun i (x,_) -> x, 1. /. ((float_of_int (i+1) ** 7.)))
+    |> List.mapi (fun i (x,_) -> x, 1. /. ((float_of_int (i+1) ** 6.)))
   else if l = n then [(1 :: visited, (*score 1*) 1.)]
   else []
 

@@ -10,16 +10,16 @@ type 's tree = {
   state : 's
 ; visits : int
 ; rewards : reward_t
+; embryos : ('s * probability) list
 ; children : 's tree list
-; actions : 's list
 }
 
 let empty_tree p s = {
   state = s
 ; visits = 0
 ; rewards = 0.
+; embryos = p.successors s
 ; children = []
-; actions = List.map fst (List.sort (fun (_, x) (_, y) -> compare y x) (p.successors s))
 }
 
 let avg_reward tree = tree.rewards /. float_of_int tree.visits
@@ -31,40 +31,52 @@ let child_score parent child =
 let child_cmp parent c1 c2 =
   compare (child_score parent c2) (child_score parent c1)
 
-(* cdf [("a", 0.1); ("b", 0.9)] = ([("b", (0.1, 1.)); ("a", (0., 0.1))], 1.) *)
+(* cdf [("a", 0.1); ("b", 0.9)] =
+     ([("b", (0.1, 0.9, 1.)); ("a", (0., 0.1, 0.1))], 1.)
+*)
 let cdf l = List.fold_left (fun (acc, sum) (x, w) ->
-  let sum' = sum +. w in ((x, (sum, sum')) :: acc, sum')) ([], 0.0) l
+  let sum' = sum +. w in ((x, (sum, w, sum')) :: acc, sum')) ([], 0.0) l
 
-let weighted_sample = function
-  [] -> failwith "weighted_sample: empty list"
-| xs ->
-    let (xs', lim) = cdf xs in
-    let r = Random.float lim in
-    fst (List.find (fun (x, (min, max)) -> min <= r && r <= max) xs')
+let cdf_sample xs =
+  let (xs', lim) = cdf xs in
+  let r = Random.float lim in
+  xs', fun (x, (min, _, max)) -> min <= r && r <= max
+
+let weighted_draw xs =
+  let xs', crit = cdf_sample xs in
+  let (inr, ofr) = List.partition crit xs' in
+  List.hd inr, List.map (fun (x, (_, w, _)) -> x, w) (List.tl inr @ ofr)
+
+let weighted_sample xs =
+  let xs', crit = cdf_sample xs in List.find crit xs'
 
 let uniform_sample xs =
-  let r = Random.int (List.length xs) in fst (List.nth xs r)
+  List.nth xs (Random.int (List.length xs))
 
-let best_sample xs = fst (List.hd (List.sort (fun (_, x) (_, y) -> compare y x) xs))
+let greedy_sample xs = List.hd (List.sort (fun (_, x) (_, y) -> compare y x) xs)
 
 let rec default_policy p s =
-  match (p.successors) s with
+  match p.successors s with
     [] -> p.reward s
-  | xs -> default_policy p (weighted_sample xs)
+  | xs -> default_policy p (fst (weighted_sample xs))
 
-let backup v rew =
+let visit v rew =
   {v with visits = v.visits + 1; rewards = v.rewards +. rew}
 
-let rec tree_policy p v = match v.actions with
-    act :: acts -> let init = empty_tree p act in
-      let rew = default_policy p act in
-      {v with rewards = v.rewards +. rew; children = backup init rew :: v.children; actions = acts; visits = v.visits + 1}
-  | [] ->
-      (match List.sort (child_cmp v) v.children with
-        [] -> {v with visits = v.visits + 1; rewards = v.rewards +. p.reward v.state}
-      | best :: rest -> let best' = tree_policy p best in
-        {v with rewards = v.rewards +. best'.rewards -. best.rewards; visits = v.visits + 1; children = best' :: rest}
-      )
+let rec tree_policy p v =
+  if v.embryos == [] then
+    match List.sort (child_cmp v) v.children with
+      [] -> visit v (p.reward v.state)
+    | best :: rest ->
+        let best' = tree_policy p best in
+        let v' = visit v (best'.rewards -. best.rewards) in
+        {v' with children = best' :: rest}
+  else
+    let (chosen, _), rest = weighted_draw v.embryos in
+    let baby = empty_tree p chosen in
+    let rew = default_policy p chosen in
+    let v' = visit v rew in
+    {v' with children = visit baby rew :: v.children; embryos = rest}
  
 let by_reward c1 c2 = compare (avg_reward c2) (avg_reward c1)
 
