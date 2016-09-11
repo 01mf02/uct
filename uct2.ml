@@ -60,8 +60,7 @@ let rec default_policy p s =
     [] -> p.reward s
   | xs -> default_policy p (fst (weighted_sample xs))
 
-let visit v rew =
-  {v with visits = v.visits + 1; rewards = v.rewards +. rew}
+let visit v rew = {v with visits = v.visits + 1; rewards = v.rewards +. rew}
 
 let rec tree_policy p v =
   if v.embryos == [] then
